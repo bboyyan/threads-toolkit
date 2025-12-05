@@ -13,6 +13,8 @@ import {
     validatePost,
     handlePageError,
     blockHeavyResources,
+    RateLimitError,
+    DEFAULT_RATE_LIMIT_CONFIG,
 } from '../utils/index.js';
 
 /**
@@ -26,7 +28,11 @@ export async function searchAction(input: SearchInput, log: Log): Promise<void> 
         proxyConfiguration: proxyConfig,
         useCookies = false,
         storageState,
+        rateLimitConfig = {},
     } = input;
+
+    // Merge with defaults
+    const rateLimitSettings = { ...DEFAULT_RATE_LIMIT_CONFIG, ...rateLimitConfig };
 
     // Determine if we should use cookies (only if enabled AND storageState provided)
     const useAuth = useCookies && storageState && Object.keys(storageState).length > 0;
@@ -143,6 +149,12 @@ export async function searchAction(input: SearchInput, log: Log): Promise<void> 
             } catch {
                 // Enhanced error detection
                 const errorInfo = await detectPageError(page);
+
+                // Check for rate limiting first
+                if (errorInfo.isRateLimited) {
+                    log.warning('Rate limited by Threads', { keyword });
+                    throw new RateLimitError('Rate limited: Threads is limiting requests. Try again later or reduce request frequency.');
+                }
 
                 if (errorInfo.isLoginWall) {
                     throw new Error('Login required: Threads is showing a login wall. Try using a different proxy or reducing request frequency.');

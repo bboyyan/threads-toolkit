@@ -9,8 +9,16 @@
 
 import type { Page } from 'playwright';
 import type { Log } from 'crawlee';
-import type { ThreadsPost, ProfileData } from '../types.js';
+import type { ThreadsPost, ProfileData, RateLimitConfig } from '../types.js';
 import { SELECTORS } from './selectors.js';
+
+// Default rate limit configuration
+export const DEFAULT_RATE_LIMIT_CONFIG: Required<RateLimitConfig> = {
+    requestDelay: 1000,
+    maxRetries: 3,
+    backoffDelay: 5000,
+    backoffMultiplier: 2,
+};
 
 /**
  * Page error detection result
@@ -18,10 +26,21 @@ import { SELECTORS } from './selectors.js';
 export interface PageErrorInfo {
     isLoginWall: boolean;
     isErrorPage: boolean;
+    isRateLimited: boolean;
     isEmpty: boolean;
     hasMainContent: boolean;
     postLinkCount: number;
     errorMessage: string;
+}
+
+/**
+ * Rate limit error class for specific handling
+ */
+export class RateLimitError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'RateLimitError';
+    }
 }
 
 /**
@@ -42,12 +61,13 @@ export async function blockHeavyResources(page: Page): Promise<void> {
 
 /**
  * Enhanced error detection for page states
- * Detects login walls, error pages, and empty pages
+ * Detects login walls, error pages, rate limiting, and empty pages
  */
 export async function detectPageError(page: Page): Promise<PageErrorInfo> {
     return page.evaluate(() => {
         const body = document.body;
         const bodyText = body?.textContent || '';
+        const bodyTextLower = bodyText.toLowerCase();
 
         // Check for login wall by looking for login buttons with specific text
         const loginTexts = ['Log in', '登入', 'ログイン', '로그인'];
@@ -66,6 +86,27 @@ export async function detectPageError(page: Page): Promise<PageErrorInfo> {
             isLoginWall = loginLink !== null;
         }
 
+        // Check for rate limiting patterns
+        const rateLimitPatterns = [
+            'rate limit',
+            'too many requests',
+            'try again later',
+            '請稍後再試',
+            '请稍后再试',
+            'しばらくしてからもう一度お試しください',
+            '나중에 다시 시도',
+            'slow down',
+            'temporarily blocked',
+            '暫時被封鎖',
+            '暂时被封锁',
+            'wait a few minutes',
+            '請等待幾分鐘',
+            '请等待几分钟',
+        ];
+        const isRateLimited = rateLimitPatterns.some((pattern) =>
+            bodyTextLower.includes(pattern.toLowerCase())
+        );
+
         // Check for error messages in multiple languages
         const errorPatterns = [
             'Something went wrong',
@@ -78,7 +119,7 @@ export async function detectPageError(page: Page): Promise<PageErrorInfo> {
             'unavailable',
         ];
         const isErrorPage = errorPatterns.some((pattern) =>
-            bodyText.toLowerCase().includes(pattern.toLowerCase())
+            bodyTextLower.includes(pattern.toLowerCase())
         );
 
         // Check if main content area exists and has content
@@ -92,16 +133,21 @@ export async function detectPageError(page: Page): Promise<PageErrorInfo> {
 
         // Extract error message if present
         let errorMessage = 'Unknown error';
-        for (const pattern of errorPatterns) {
-            if (bodyText.toLowerCase().includes(pattern.toLowerCase())) {
-                errorMessage = pattern;
-                break;
+        if (isRateLimited) {
+            errorMessage = 'Rate limited by Threads';
+        } else {
+            for (const pattern of errorPatterns) {
+                if (bodyTextLower.includes(pattern.toLowerCase())) {
+                    errorMessage = pattern;
+                    break;
+                }
             }
         }
 
         return {
             isLoginWall,
             isErrorPage,
+            isRateLimited,
             isEmpty,
             hasMainContent,
             postLinkCount,
@@ -258,12 +304,79 @@ export function validateProfile(profile: ProfileData): { valid: boolean; reason?
  * Handle page error and throw appropriate error message
  */
 export function handlePageError(errorInfo: PageErrorInfo, _context: string): void {
+    if (errorInfo.isRateLimited) {
+        throw new RateLimitError('Rate limited: Threads is limiting requests. The crawler will retry with exponential backoff.');
+    }
+
     if (errorInfo.isLoginWall) {
         throw new Error('Login required: Threads is showing a login wall. Try using a different proxy or reducing request frequency.');
     }
 
     if (errorInfo.isErrorPage) {
         throw new Error(`Threads returned an error: ${errorInfo.errorMessage}. The site may be rate limiting or blocking requests.`);
+    }
+}
+
+/**
+ * Sleep utility for delays
+ */
+export function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Execute a function with exponential backoff retry on rate limit errors
+ */
+export async function withRateLimitRetry<T>(
+    fn: () => Promise<T>,
+    config: RateLimitConfig,
+    log: Log,
+    context: string
+): Promise<T> {
+    const {
+        maxRetries = DEFAULT_RATE_LIMIT_CONFIG.maxRetries,
+        backoffDelay = DEFAULT_RATE_LIMIT_CONFIG.backoffDelay,
+        backoffMultiplier = DEFAULT_RATE_LIMIT_CONFIG.backoffMultiplier,
+    } = config;
+
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error as Error;
+
+            // Only retry on rate limit errors
+            if (!(error instanceof RateLimitError)) {
+                throw error;
+            }
+
+            if (attempt < maxRetries) {
+                const delay = backoffDelay * Math.pow(backoffMultiplier, attempt);
+                log.warning(`Rate limited (${context}), retrying in ${delay / 1000}s...`, {
+                    attempt: attempt + 1,
+                    maxRetries,
+                    delayMs: delay,
+                });
+                await sleep(delay);
+            }
+        }
+    }
+
+    // All retries exhausted
+    log.error(`Rate limit retries exhausted (${context})`, { maxRetries });
+    throw lastError;
+}
+
+/**
+ * Apply request delay between operations
+ */
+export async function applyRequestDelay(config: RateLimitConfig, log: Log): Promise<void> {
+    const delay = config.requestDelay ?? DEFAULT_RATE_LIMIT_CONFIG.requestDelay;
+    if (delay > 0) {
+        log.debug(`Applying request delay: ${delay}ms`);
+        await sleep(delay);
     }
 }
 

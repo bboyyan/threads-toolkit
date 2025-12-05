@@ -64,6 +64,36 @@ Enable cookie injection for extended data access. Useful when encountering login
 
 **Note**: If `useCookies` is enabled but `storageState` is empty, the Actor falls back to no-auth mode with a warning. Only cookies and localStorage for Threads domains are injected; sessionStorage is not supported.
 
+### Rate Limit Protection (Optional)
+
+Configure rate limit protection to avoid being blocked by Threads.
+
+| Field | Type | Required | Description | Default |
+|-------|------|----------|-------------|---------|
+| `rateLimitConfig.requestDelay` | integer | No | Delay between requests (ms) | `1000` |
+| `rateLimitConfig.maxRetries` | integer | No | Max retries when rate limited | `3` |
+| `rateLimitConfig.backoffDelay` | integer | No | Initial backoff delay (ms) | `5000` |
+| `rateLimitConfig.backoffMultiplier` | number | No | Backoff multiplier | `2` |
+
+**Example:**
+
+```json
+{
+    "action": "search",
+    "keyword": "AI",
+    "rateLimitConfig": {
+        "requestDelay": 2000,
+        "maxRetries": 5,
+        "backoffDelay": 10000
+    }
+}
+```
+
+**How it works:**
+- When Threads returns a rate limit error, the Actor automatically pauses and retries
+- Uses exponential backoff: first retry after 5s, second after 10s, third after 20s (with default settings)
+- Logs warnings when rate limited to help you monitor and adjust settings
+
 ### Search Action
 
 Search for posts by keyword on Threads.net.

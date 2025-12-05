@@ -16,6 +16,8 @@ import {
     validatePost,
     handlePageError,
     blockHeavyResources,
+    RateLimitError,
+    DEFAULT_RATE_LIMIT_CONFIG,
 } from '../utils/index.js';
 
 /**
@@ -29,7 +31,11 @@ export async function hashtagAction(input: HashtagInput, log: Log): Promise<void
         proxyConfiguration: proxyConfig,
         useCookies = false,
         storageState,
+        rateLimitConfig = {},
     } = input;
+
+    // Merge with defaults
+    const rateLimitSettings = { ...DEFAULT_RATE_LIMIT_CONFIG, ...rateLimitConfig };
 
     // Normalize tag (remove # if present)
     const normalizedTag = tag.replace(/^#/, '');
@@ -150,6 +156,12 @@ export async function hashtagAction(input: HashtagInput, log: Log): Promise<void
             } catch {
                 // Check for error states
                 const errorInfo = await detectPageError(page);
+
+                // Check for rate limiting first
+                if (errorInfo.isRateLimited) {
+                    log.warning('Rate limited by Threads', { tag: normalizedTag });
+                    throw new RateLimitError('Rate limited: Threads is limiting requests. Try again later or reduce request frequency.');
+                }
 
                 if (errorInfo.isLoginWall) {
                     throw new Error('Login required: Threads is showing a login wall. Try using a different proxy or reducing request frequency.');

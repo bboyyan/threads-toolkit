@@ -16,14 +16,18 @@ import {
     scrollForPosts,
     extractPostsFromPage,
     blockHeavyResources,
+    DEFAULT_RATE_LIMIT_CONFIG,
 } from '../utils/index.js';
 
 /**
  * Execute post action
  */
 export async function postAction(input: PostInput, log: Log): Promise<void> {
-    const { postUrl, proxyConfiguration: proxyConfig, maxItems, useCookies = false, storageState } = input;
+    const { postUrl, proxyConfiguration: proxyConfig, maxItems, useCookies = false, storageState, rateLimitConfig = {} } = input;
     const maxReplies = maxItems ?? 50;
+
+    // Merge with defaults
+    const rateLimitSettings = { ...DEFAULT_RATE_LIMIT_CONFIG, ...rateLimitConfig };
 
     // Determine if we should use cookies (only if enabled AND storageState provided)
     const useAuth = useCookies && storageState && Object.keys(storageState).length > 0;

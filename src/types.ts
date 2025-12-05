@@ -16,6 +16,17 @@ export interface ProxyConfiguration {
     apifyProxyCountry?: string;
 }
 
+export interface RateLimitConfig {
+    /** Delay between requests in milliseconds (default: 1000) */
+    requestDelay?: number;
+    /** Maximum retries when rate limited (default: 3) */
+    maxRetries?: number;
+    /** Initial backoff delay in milliseconds (default: 5000) */
+    backoffDelay?: number;
+    /** Backoff multiplier for exponential backoff (default: 2) */
+    backoffMultiplier?: number;
+}
+
 export interface BaseInput {
     action: ActionType;
     maxItems?: number;
@@ -23,6 +34,8 @@ export interface BaseInput {
     proxyConfiguration?: ProxyConfiguration;
     useCookies?: boolean;
     storageState?: Record<string, unknown>;
+    /** Rate limit protection settings */
+    rateLimitConfig?: RateLimitConfig;
 }
 
 export interface SearchInput extends BaseInput {

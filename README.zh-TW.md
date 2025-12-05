@@ -64,6 +64,36 @@
 
 **注意**：若啟用 `useCookies` 但 `storageState` 為空，Actor 會退回無驗證模式並記錄警告。僅注入 Threads 網域的 cookies 和 localStorage；不支援 sessionStorage。
 
+### 速率限制保護（選用）
+
+設定速率限制保護以避免被 Threads 封鎖。
+
+| 欄位 | 型別 | 必填 | 說明 | 預設 |
+|------|------|------|------|------|
+| `rateLimitConfig.requestDelay` | integer | 否 | 請求間隔（毫秒） | `1000` |
+| `rateLimitConfig.maxRetries` | integer | 否 | 被限制時最大重試次數 | `3` |
+| `rateLimitConfig.backoffDelay` | integer | 否 | 初始退避延遲（毫秒） | `5000` |
+| `rateLimitConfig.backoffMultiplier` | number | 否 | 退避乘數 | `2` |
+
+**範例：**
+
+```json
+{
+    "action": "search",
+    "keyword": "AI",
+    "rateLimitConfig": {
+        "requestDelay": 2000,
+        "maxRetries": 5,
+        "backoffDelay": 10000
+    }
+}
+```
+
+**運作方式：**
+- 當 Threads 返回速率限制錯誤時，Actor 會自動暫停並重試
+- 使用指數退避：預設設定下，首次重試等待 5 秒，第二次 10 秒，第三次 20 秒
+- 被限制時會記錄警告，幫助您監控和調整設定
+
 ### 搜尋貼文 (Search)
 
 依關鍵字在 Threads.net 搜尋貼文。

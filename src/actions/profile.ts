@@ -18,13 +18,17 @@ import {
     extractPostsFromPage,
     scrollForPosts,
     blockHeavyResources,
+    DEFAULT_RATE_LIMIT_CONFIG,
 } from '../utils/index.js';
 
 /**
  * Execute profile action
  */
 export async function profileAction(input: ProfileInput, log: Log): Promise<void> {
-    const { username, proxyConfiguration: proxyConfig, maxItems = 20, includePosts = true, useCookies = false, storageState } = input;
+    const { username, proxyConfiguration: proxyConfig, maxItems = 20, includePosts = true, useCookies = false, storageState, rateLimitConfig = {} } = input;
+
+    // Merge with defaults
+    const rateLimitSettings = { ...DEFAULT_RATE_LIMIT_CONFIG, ...rateLimitConfig };
 
     // Determine if we should use cookies (only if enabled AND storageState provided)
     const useAuth = useCookies && storageState && Object.keys(storageState).length > 0;
