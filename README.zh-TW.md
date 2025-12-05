@@ -43,6 +43,27 @@
 | `action` | string | 是 | 操作類型：`search`、`hashtag`、`profile` 或 `post` | - |
 | `proxyConfiguration` | object | 否 | 代理設定，建議使用 Apify Proxy | Apify Proxy |
 
+### 身份驗證（選用）
+
+啟用 Cookie 注入以取得更多資料。當遇到登入牆時特別有用。
+
+| 欄位 | 型別 | 必填 | 說明 | 預設 |
+|------|------|------|------|------|
+| `useCookies` | boolean | 否 | 啟用 Cookie/儲存注入 | `false` |
+| `storageState` | object | 否 | Playwright `storageState.json` 內容 | - |
+
+**如何取得 storageState：**
+
+1. 在瀏覽器中登入 Threads
+2. 使用 Playwright 匯出儲存狀態：
+   ```javascript
+   // 使用 Playwright 登入後
+   await context.storageState({ path: 'storageState.json' });
+   ```
+3. 將 JSON 內容複製到 `storageState` 欄位
+
+**注意**：若啟用 `useCookies` 但 `storageState` 為空，Actor 會退回無驗證模式並記錄警告。僅注入 Threads 網域的 cookies 和 localStorage；不支援 sessionStorage。
+
 ### 搜尋貼文 (Search)
 
 依關鍵字在 Threads.net 搜尋貼文。

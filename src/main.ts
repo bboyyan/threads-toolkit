@@ -72,6 +72,8 @@ async function runBatch(batch: BatchInput, log: Log): Promise<void> {
         filter,
         proxyConfiguration,
         concurrency = 2,
+        useCookies,
+        storageState,
     } = batch;
 
     const tasks: Array<{ name: string; fn: () => Promise<void> }> = [];
@@ -79,25 +81,25 @@ async function runBatch(batch: BatchInput, log: Log): Promise<void> {
     for (const keyword of keywords) {
         tasks.push({
             name: `search:${keyword}`,
-            fn: () => runSingle({ action: 'search', keyword, maxItems, filter, proxyConfiguration }, log),
+            fn: () => runSingle({ action: 'search', keyword, maxItems, filter, proxyConfiguration, useCookies, storageState }, log),
         });
     }
     for (const username of usernames) {
         tasks.push({
             name: `profile:${username}`,
-            fn: () => runSingle({ action: 'profile', username, maxItems, proxyConfiguration }, log),
+            fn: () => runSingle({ action: 'profile', username, maxItems, proxyConfiguration, useCookies, storageState }, log),
         });
     }
     for (const tag of tags) {
         tasks.push({
             name: `hashtag:${tag}`,
-            fn: () => runSingle({ action: 'hashtag', tag, maxItems, filter, proxyConfiguration }, log),
+            fn: () => runSingle({ action: 'hashtag', tag, maxItems, filter, proxyConfiguration, useCookies, storageState }, log),
         });
     }
     for (const postUrl of postUrls) {
         tasks.push({
             name: `post:${postUrl}`,
-            fn: () => runSingle({ action: 'post', postUrl, proxyConfiguration }, log),
+            fn: () => runSingle({ action: 'post', postUrl, proxyConfiguration, useCookies, storageState }, log),
         });
     }
 

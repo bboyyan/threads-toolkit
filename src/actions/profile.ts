@@ -23,9 +23,17 @@ import {
  * Execute profile action
  */
 export async function profileAction(input: ProfileInput, log: Log): Promise<void> {
-    const { username, proxyConfiguration: proxyConfig, maxItems = 20, includePosts = true } = input;
+    const { username, proxyConfiguration: proxyConfig, maxItems = 20, includePosts = true, useCookies = false, storageState } = input;
 
-    log.info('Starting profile fetch', { username });
+    // Determine if we should use cookies (only if enabled AND storageState provided)
+    const useAuth = useCookies && storageState && Object.keys(storageState).length > 0;
+
+    // Warn if useCookies enabled but no storageState provided
+    if (useCookies && !useAuth) {
+        log.warning('useCookies enabled but storageState is empty, falling back to no-auth mode');
+    }
+
+    log.info('Starting profile fetch', { username, useAuth });
 
     // Build profile URL
     const profileUrl = `https://www.threads.com/@${username}`;
@@ -65,6 +73,44 @@ export async function profileAction(input: ProfileInput, log: Log): Promise<void
             launchOptions: {
                 args: ['--disable-gpu', '--no-sandbox'],
             },
+        },
+        browserPoolOptions: {
+            useFingerprints: false,
+            postPageCreateHooks: useAuth ? [
+                async (page) => {
+                    const state = storageState as any;
+                    // Inject cookies
+                    const cookies = state?.cookies || [];
+                    if (cookies.length > 0) {
+                        await page.context().addCookies(cookies);
+                        log.info('Injected login cookies', { count: cookies.length });
+                    }
+                    // Inject localStorage from origins (only for Threads domains)
+                    const origins = state?.origins || [];
+                    for (const origin of origins) {
+                        const originUrl = origin.origin || '';
+                        // Only inject for Threads domains
+                        if (!originUrl.includes('threads.net') && !originUrl.includes('threads.com')) {
+                            log.debug('Skipping non-Threads origin', { origin: originUrl });
+                            continue;
+                        }
+                        const localStorage = origin.localStorage || [];
+                        if (localStorage.length > 0) {
+                            await page.context().addInitScript((items) => {
+                                for (const item of items) {
+                                    window.localStorage.setItem(item.name, item.value);
+                                }
+                            }, localStorage);
+                            log.info('Injected localStorage', { origin: originUrl, count: localStorage.length });
+                        }
+                        // Note: sessionStorage is not injected (Playwright limitation)
+                        const sessionStorage = origin.sessionStorage || [];
+                        if (sessionStorage.length > 0) {
+                            log.debug('sessionStorage not injected (not supported)', { origin: originUrl, count: sessionStorage.length });
+                        }
+                    }
+                },
+            ] : undefined,
         },
         requestHandler: async ({ page, request }) => {
             log.info('Processing profile page', { url: request.url });

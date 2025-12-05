@@ -76,6 +76,20 @@
             "default": { "useApifyProxy": true },
             "sectionCaption": "🌐 Proxy",
             "sectionDescription": "Network settings"
+        },
+        "useCookies": {
+            "title": "Use Login Cookies",
+            "type": "boolean",
+            "description": "Enable to use saved login state for extended data access. Requires storageState below.",
+            "default": false,
+            "sectionCaption": "🔐 Authentication (Optional)",
+            "sectionDescription": "Use saved login cookies for more data access"
+        },
+        "storageState": {
+            "title": "Storage State (JSON)",
+            "type": "object",
+            "description": "Playwright storageState.json content exported after logging into Threads. If useCookies is true but this is empty, falls back to no-cookie mode.",
+            "editor": "json"
         }
     }
 }

@@ -21,6 +21,8 @@ export interface BaseInput {
     maxItems?: number;
     outputFormat?: OutputFormat;
     proxyConfiguration?: ProxyConfiguration;
+    useCookies?: boolean;
+    storageState?: Record<string, unknown>;
 }
 
 export interface SearchInput extends BaseInput {
@@ -114,4 +116,6 @@ export interface BatchInput {
     filter?: FilterType;
     proxyConfiguration?: ProxyConfiguration;
     concurrency?: number;
+    useCookies?: boolean;
+    storageState?: Record<string, unknown>;
 }

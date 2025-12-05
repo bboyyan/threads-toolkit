@@ -43,6 +43,27 @@ A powerful and reliable Apify Actor for scraping Threads.net - Meta's text-based
 | `action` | string | Yes | Action type: `search`, `hashtag`, `profile`, or `post` | - |
 | `proxyConfiguration` | object | No | Proxy settings for reliability | Apify Proxy |
 
+### Authentication (Optional)
+
+Enable cookie injection for extended data access. Useful when encountering login walls.
+
+| Field | Type | Required | Description | Default |
+|-------|------|----------|-------------|---------|
+| `useCookies` | boolean | No | Enable cookie/storage injection | `false` |
+| `storageState` | object | No | Playwright `storageState.json` content | - |
+
+**How to obtain storageState:**
+
+1. Login to Threads in your browser
+2. Use Playwright to export storage state:
+   ```javascript
+   // After logging in with Playwright
+   await context.storageState({ path: 'storageState.json' });
+   ```
+3. Copy the JSON content to the `storageState` field
+
+**Note**: If `useCookies` is enabled but `storageState` is empty, the Actor falls back to no-auth mode with a warning. Only cookies and localStorage for Threads domains are injected; sessionStorage is not supported.
+
 ### Search Action
 
 Search for posts by keyword on Threads.net.
