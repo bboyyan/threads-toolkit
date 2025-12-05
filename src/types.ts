@@ -92,6 +92,8 @@ export interface ProfileData {
     followersCount?: number;
     followingCount?: number;
     postsCount?: number;
+    location?: string | null;
+    joinedDate?: string | null;
     partial?: boolean;
     missingFields?: string[];
 }

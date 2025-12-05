@@ -786,6 +786,217 @@ export async function extractSinglePostFromPage(page: Page, postId: string, post
 }
 
 // ============================================
+// Profile About API Functions
+// ============================================
+
+/**
+ * Authentication tokens required for Threads internal API
+ */
+export interface ThreadsAuthTokens {
+    fb_dtsg: string;
+    lsd: string;
+    jazoest: string;
+}
+
+/**
+ * Profile "About" data from API
+ */
+export interface ProfileAboutData {
+    location: string | null;
+    joinedDate: string | null;
+}
+
+/**
+ * Extract authentication tokens from page HTML
+ * Tokens are embedded in script tags and HTML attributes
+ */
+export async function extractAuthTokens(page: Page): Promise<ThreadsAuthTokens | null> {
+    return page.evaluate(() => {
+        const html = document.documentElement.innerHTML;
+
+        // Extract fb_dtsg
+        let fb_dtsg = '';
+        const dtsgPatterns = [
+            /"fb_dtsg"\s*:\s*"([^"]+)"/,
+            /name="fb_dtsg"\s+value="([^"]+)"/,
+            /\["DTSGInitData",\[\],\{"token":"([^"]+)"/,
+            /DTSGInitialData.*?"token"\s*:\s*"([^"]+)"/,
+        ];
+        for (const pattern of dtsgPatterns) {
+            const match = html.match(pattern);
+            if (match) {
+                fb_dtsg = match[1];
+                break;
+            }
+        }
+
+        // Extract lsd
+        let lsd = '';
+        const lsdPatterns = [/"lsd"\s*:\s*"([^"]+)"/, /\["LSD",\[\],\{"token":"([^"]+)"/];
+        for (const pattern of lsdPatterns) {
+            const match = html.match(pattern);
+            if (match) {
+                lsd = match[1];
+                break;
+            }
+        }
+
+        // Extract jazoest
+        let jazoest = '';
+        const jazoestMatch = html.match(/"jazoest"\s*:\s*"?(\d+)"?/);
+        if (jazoestMatch) {
+            jazoest = jazoestMatch[1];
+        }
+
+        if (!fb_dtsg || !lsd) {
+            return null;
+        }
+
+        return { fb_dtsg, lsd, jazoest };
+    });
+}
+
+/**
+ * Extract user ID from profile page
+ * User ID is required to call the About API
+ */
+export async function extractUserId(page: Page, username: string): Promise<string | null> {
+    return page.evaluate((uname) => {
+        const html = document.documentElement.innerHTML;
+
+        // Pattern 1: Look for user_id in route definitions
+        const routePattern = new RegExp(`"user_id"\\s*:\\s*"?(\\d+)"?[^}]*"username"\\s*:\\s*"${uname}"`, 'i');
+        let match = html.match(routePattern);
+        if (match) return match[1];
+
+        // Pattern 2: Look for pk (primary key) with username
+        const pkPattern = new RegExp(`"pk"\\s*:\\s*"?(\\d+)"?[^}]*"username"\\s*:\\s*"${uname}"`, 'i');
+        match = html.match(pkPattern);
+        if (match) return match[1];
+
+        // Pattern 3: Look for id with username nearby
+        const idPattern = new RegExp(`"id"\\s*:\\s*"?(\\d+)"?[^}]{0,100}"username"\\s*:\\s*"${uname}"`, 'i');
+        match = html.match(idPattern);
+        if (match) return match[1];
+
+        // Pattern 4: Look for target_user_id in bloks data
+        const targetPattern = new RegExp(`"target_user_id"\\s*:\\s*"?(\\d+)"?`, 'i');
+        match = html.match(targetPattern);
+        if (match) return match[1];
+
+        return null;
+    }, username);
+}
+
+/**
+ * Fetch profile "About" data (location, joined date) via internal API
+ * Returns null if extraction fails - profile will still be saved without these fields
+ */
+export async function fetchProfileAbout(
+    page: Page,
+    userId: string,
+    tokens: ThreadsAuthTokens
+): Promise<ProfileAboutData | null> {
+    return page.evaluate(
+        async (args) => {
+            const { userId, tokens } = args;
+
+            const endpoint =
+                '/api/graphql';
+
+            // Generate UUID for session
+            const uuid = () =>
+                'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                    const r = (Math.random() * 16) | 0;
+                    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+                });
+
+            const params = new URLSearchParams();
+            params.append('av', '0');
+            params.append('__user', '0');
+            params.append('__a', '1');
+            params.append('__comet_req', '29');
+            params.append('fb_dtsg', tokens.fb_dtsg);
+            params.append('jazoest', tokens.jazoest);
+            params.append('lsd', tokens.lsd);
+            params.append('doc_id', '9159636494046708');
+            params.append(
+                'variables',
+                JSON.stringify({
+                    userID: userId,
+                })
+            );
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-FB-Friendly-Name': 'BarcelonaProfileAboutTabQuery',
+                    },
+                    body: params.toString(),
+                    credentials: 'include',
+                });
+
+                const text = await response.text();
+
+                // Remove "for (;;);" prefix if present
+                let jsonText = text;
+                if (jsonText.startsWith('for (;;);')) {
+                    jsonText = jsonText.substring(9);
+                }
+
+                const data = JSON.parse(jsonText);
+
+                // Navigate to user data
+                const userData = data?.data?.user;
+                if (!userData) {
+                    return null;
+                }
+
+                // Extract location - may be in bio_location or location field
+                let location: string | null = null;
+                if (userData.bio_location?.name) {
+                    location = userData.bio_location.name;
+                } else if (userData.location) {
+                    location = userData.location;
+                }
+
+                // Extract joined date from date_joined_as_string or create_timestamp
+                let joinedDate: string | null = null;
+                if (userData.date_joined_as_string) {
+                    // Clean up: remove suffix like "· #2,697,767"
+                    joinedDate = userData.date_joined_as_string.split(/\s*[·•]\s*/)[0].trim();
+                } else if (userData.create_timestamp) {
+                    // Convert timestamp to month/year
+                    const date = new Date(userData.create_timestamp * 1000);
+                    const months = [
+                        'January',
+                        'February',
+                        'March',
+                        'April',
+                        'May',
+                        'June',
+                        'July',
+                        'August',
+                        'September',
+                        'October',
+                        'November',
+                        'December',
+                    ];
+                    joinedDate = `${months[date.getMonth()]} ${date.getFullYear()}`;
+                }
+
+                return { location, joinedDate };
+            } catch {
+                return null;
+            }
+        },
+        { userId, tokens }
+    );
+}
+
+// ============================================
 // Exported Utilities
 // ============================================
 

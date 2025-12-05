@@ -227,6 +227,8 @@ Each post is stored as a separate record:
     "bio": "Building the future...",
     "isVerified": true,
     "followersCount": 5417000,
+    "location": "California, USA",
+    "joinedDate": "July 2023",
     "partial": false,
     "missingFields": [],
     "type": "profile",
@@ -243,8 +245,12 @@ Each post is stored as a separate record:
 | `bio` | string | User bio text |
 | `isVerified` | boolean | Whether the user is verified |
 | `followersCount` | integer | Number of followers |
+| `location` | string \| null | User's location (from "About this profile") |
+| `joinedDate` | string \| null | Account creation month/year (e.g., "July 2023") |
 | `partial` | boolean | True if some optional fields are missing |
 | `missingFields` | array | Names of missing optional fields |
+
+**Note:** `location` and `joinedDate` are fetched via an internal API. If extraction fails, these fields will be `null` but the profile will still be saved.
 
 Note: Recent posts from the profile page are pushed as separate Dataset items with `source: "profile_posts"` and `profile: <username>`.
 

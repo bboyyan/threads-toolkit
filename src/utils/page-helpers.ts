@@ -247,6 +247,9 @@ export function validateProfile(profile: ProfileData): { valid: boolean; reason?
     if (!profile.avatarUrl) missing.push('avatarUrl');
     if (profile.followersCount === undefined) missing.push('followersCount');
     if (!profile.bio) missing.push('bio');
+    // Track location and joinedDate as optional fields
+    if (profile.location === null || profile.location === undefined) missing.push('location');
+    if (profile.joinedDate === null || profile.joinedDate === undefined) missing.push('joinedDate');
 
     return { valid: true, partial: missing.length > 0, missing };
 }

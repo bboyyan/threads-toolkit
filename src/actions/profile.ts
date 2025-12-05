@@ -9,6 +9,9 @@ import { PlaywrightCrawler, Dataset, Log } from 'crawlee';
 import type { ProfileInput } from '../types.js';
 import {
     extractProfileFromPage,
+    extractAuthTokens,
+    extractUserId,
+    fetchProfileAbout,
     detectPageError,
     handlePageError,
     isNotFoundPage,
@@ -149,6 +152,46 @@ export async function profileAction(input: ProfileInput, log: Log): Promise<void
 
             if (!profileData) {
                 throw new Error(`Failed to extract profile data for @${username}`);
+            }
+
+            // Fetch location and joined date via About API
+            try {
+                log.debug('Attempting to fetch profile About data...');
+
+                // Step 1: Extract auth tokens from page
+                const authTokens = await extractAuthTokens(page);
+                if (!authTokens) {
+                    log.debug('Could not extract auth tokens, skipping About data');
+                    profileData.location = null;
+                    profileData.joinedDate = null;
+                } else {
+                    // Step 2: Extract user ID
+                    const userId = await extractUserId(page, username);
+                    if (!userId) {
+                        log.debug('Could not extract user ID, skipping About data');
+                        profileData.location = null;
+                        profileData.joinedDate = null;
+                    } else {
+                        // Step 3: Call About API
+                        const aboutData = await fetchProfileAbout(page, userId, authTokens);
+                        if (aboutData) {
+                            profileData.location = aboutData.location;
+                            profileData.joinedDate = aboutData.joinedDate;
+                            log.info('Profile About data extracted', {
+                                location: aboutData.location,
+                                joinedDate: aboutData.joinedDate,
+                            });
+                        } else {
+                            log.debug('About API returned no data');
+                            profileData.location = null;
+                            profileData.joinedDate = null;
+                        }
+                    }
+                }
+            } catch (err) {
+                log.warning('Failed to fetch profile About data', { error: String(err) });
+                profileData.location = null;
+                profileData.joinedDate = null;
             }
 
             // Validate profile data

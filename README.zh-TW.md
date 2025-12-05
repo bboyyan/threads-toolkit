@@ -227,6 +227,8 @@
     "bio": "Building the future...",
     "isVerified": true,
     "followersCount": 5417000,
+    "location": "California, USA",
+    "joinedDate": "July 2023",
     "partial": false,
     "missingFields": [],
     "type": "profile",
@@ -243,8 +245,12 @@
 | `bio` | string | 個人簡介 |
 | `isVerified` | boolean | 是否已驗證 |
 | `followersCount` | integer | 粉絲數 |
+| `location` | string \| null | 用戶所在地（來自「關於此個人檔案」） |
+| `joinedDate` | string \| null | 帳號建立月份/年份（如 "July 2023"） |
 | `partial` | boolean | 若缺少非必填欄位為 true |
 | `missingFields` | array | 缺少的非必填欄位名稱 |
+
+**注意**：`location` 和 `joinedDate` 透過內部 API 取得。若提取失敗，這些欄位將為 `null`，但個人檔案仍會儲存。
 
 注意：個人頁面的近期貼文會以獨立的 Dataset 項目輸出，包含 `source: "profile_posts"` 和 `profile: <username>`。
 
