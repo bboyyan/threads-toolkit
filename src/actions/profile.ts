@@ -1,0 +1,160 @@
+/**
+ * Profile Action - Fetch user profile data
+ *
+ * Uses centralized parsing from parser.ts for consistency.
+ */
+
+import { Actor } from 'apify';
+import { PlaywrightCrawler, Dataset, Log } from 'crawlee';
+import type { ProfileInput } from '../types.js';
+import {
+    extractProfileFromPage,
+    detectPageError,
+    handlePageError,
+    isNotFoundPage,
+    validateProfile,
+    validatePost,
+    extractPostsFromPage,
+    scrollForPosts,
+    blockHeavyResources,
+} from '../utils/index.js';
+
+/**
+ * Execute profile action
+ */
+export async function profileAction(input: ProfileInput, log: Log): Promise<void> {
+    const { username, proxyConfiguration: proxyConfig, maxItems = 20, includePosts = true } = input;
+
+    log.info('Starting profile fetch', { username });
+
+    // Build profile URL
+    const profileUrl = `https://www.threads.com/@${username}`;
+
+    // Create proxy configuration from input
+    const proxyConfiguration = await Actor.createProxyConfiguration(proxyConfig);
+
+    // Shared set for capturing video URLs across hooks and handler
+    const videoRequests = new Set<string>();
+
+    // Create crawler with profile-specific handler
+    const crawler = new PlaywrightCrawler({
+        proxyConfiguration,
+        maxRequestsPerCrawl: 1,
+        maxConcurrency: 1,
+        headless: true,
+        requestHandlerTimeoutSecs: 120,
+        navigationTimeoutSecs: 60,
+        preNavigationHooks: [
+            async ({ page }) => {
+                await blockHeavyResources(page);
+                // Intercept network responses to capture video URLs (before navigation)
+                page.on('response', async (response) => {
+                    try {
+                        const ct = response.headers()['content-type'] || '';
+                        const url = response.url();
+                        if (ct.startsWith('video/') || url.match(/\.(mp4|m3u8)(\?|$)/i)) {
+                            videoRequests.add(url);
+                        }
+                    } catch {
+                        /* ignore */
+                    }
+                });
+            },
+        ],
+        launchContext: {
+            launchOptions: {
+                args: ['--disable-gpu', '--no-sandbox'],
+            },
+        },
+        requestHandler: async ({ page, request }) => {
+            log.info('Processing profile page', { url: request.url });
+
+            // Wait for page to load
+            await page.waitForLoadState('domcontentloaded');
+            log.debug('DOM content loaded');
+
+            // Wait for profile content to appear
+            try {
+                // Wait for the profile header area with display name
+                await page.waitForSelector('h1', { timeout: 15000 });
+                log.info('Profile content found');
+            } catch {
+                // Check for error states using shared helper
+                const errorInfo = await detectPageError(page);
+
+                if (errorInfo.isLoginWall) {
+                    handlePageError(errorInfo, 'profile');
+                }
+
+                if (errorInfo.isErrorPage) {
+                    handlePageError(errorInfo, 'profile');
+                }
+
+                // Check for 404
+                if (await isNotFoundPage(page)) {
+                    throw new Error(`Profile not found: @${username}`);
+                }
+
+                throw new Error(`Failed to load profile page for @${username}`);
+            }
+
+            // Extract profile data using centralized parser
+            const profileData = await extractProfileFromPage(page, username);
+
+            if (!profileData) {
+                throw new Error(`Failed to extract profile data for @${username}`);
+            }
+
+            // Validate profile data
+            const validation = validateProfile(profileData);
+            if (!validation.valid) {
+                log.warning('Profile data validation failed', { reason: validation.reason });
+                return;
+            }
+            if (validation.partial) {
+                profileData.partial = true;
+                profileData.missingFields = validation.missing;
+                log.info('Profile data is partial', { missing: validation.missing });
+            }
+
+            // Push profile
+            await Dataset.pushData({ ...profileData, type: 'profile', source: 'profile' });
+            log.info('Profile data saved', { username: profileData.username });
+
+            // Also fetch recent posts from profile page
+            if (includePosts) {
+                try {
+                    // Inject captured video URLs into page context before extracting posts
+                    if (videoRequests.size > 0) {
+                        const urls = Array.from(videoRequests);
+                        log.info('Captured video URLs from network', { count: urls.length });
+                        await page.evaluate((captured) => {
+                            (window as any).__threadsVideoRequests = captured;
+                        }, urls);
+                    }
+
+                    await scrollForPosts(page, maxItems, log);
+                    const posts = await extractPostsFromPage(page, maxItems);
+                    let savedCount = 0;
+                    for (const post of posts) {
+                        const postValidation = validatePost(post);
+                        if (!postValidation.valid) {
+                            log.debug('Skipping invalid profile post', { reason: postValidation.reason, id: post.id });
+                            continue;
+                        }
+                        await Dataset.pushData({ ...post, source: 'profile_posts', profile: profileData.username });
+                        savedCount++;
+                    }
+                    log.info('Profile posts saved', { count: savedCount, total: posts.length, max: maxItems });
+                } catch (err) {
+                    log.warning('Failed to extract profile posts', { error: String(err) });
+                }
+            }
+        },
+    });
+
+    // Run crawler
+    await crawler.run([{ url: profileUrl }]);
+
+    log.info('Profile action finished', { username });
+}
