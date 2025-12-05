@@ -2,53 +2,37 @@
 
 Languages: [English](README.md) | [中文](README.zh-TW.md)
 
-A reliable Apify Actor for scraping Threads.net - Meta's text-based social media platform.
+A powerful and reliable Apify Actor for scraping Threads.net - Meta's text-based social media platform. Extract posts, profiles, hashtags, and replies without login. Export to JSON/CSV/Excel.
+
+## Important: Data Scraping Limitations
+
+**Threads data scraping has inherent limitations:**
+
+- **Data Volume Limits**: Threads platform restricts accessible data volume. Actual results vary based on account activity, content type, and other factors
+- **Dynamic Loading**: Threads uses infinite scroll to load content, but stops loading after a certain amount
+- **Rate Limiting**: Excessive requests may trigger platform protection mechanisms
+- **Content Availability**: Cannot access private accounts, deleted content, or region-restricted content
+- **Login Walls**: Threads may occasionally display login walls that block scraping
+
+### Best Practices
+
+1. **Small Batch Testing**: Start with smaller limits for initial tests, gradually increase to find optimal settings
+2. **Realistic Expectations**: Understand that actual results may be fewer than requested
+3. **Error Handling**: Be prepared to handle partial failures or incomplete results
+4. **Execution Intervals**: Avoid overly frequent scraping; recommend at least 5-10 minute intervals
+5. **Data Validation**: Always verify that scraped data is complete and accurate
+6. **Backup Plans**: For critical data, consider multiple scraping attempts or different parameters
 
 ## Features
 
-### 1. Search Posts
-Search for posts by keyword on Threads.net.
-
-```json
-{
-    "action": "search",
-    "keyword": "artificial intelligence",
-    "filter": "recent",
-    "maxItems": 100
-}
-```
-
-### 2. Hashtag Search
-Search posts by hashtag tag.
-
-```json
-{
-    "action": "hashtag",
-    "tag": "AI",
-    "filter": "recent",
-    "maxItems": 50
-}
-```
-
-### 3. Profile Scraping
-Fetch user profile data including bio, follower count, verification status, and recent posts on the profile page.
-
-```json
-{
-    "action": "profile",
-    "username": "zuck"
-}
-```
-
-### 4. Single Post Extraction
-Extract detailed data from a specific post by URL (includes replies on the page if available).
-
-```json
-{
-    "action": "post",
-    "postUrl": "https://www.threads.com/@zuck/post/ABC123xyz"
-}
-```
+- **Search Posts**: Search for posts by keyword with sorting options
+- **Hashtag Search**: Search posts by hashtag tag
+- **Profile Scraping**: Fetch user profile data including bio, follower count, verification status, and recent posts
+- **Single Post Extraction**: Extract detailed data from a specific post by URL, including replies
+- **Batch Mode**: Process multiple keywords/usernames/tags/URLs in one run with concurrency control
+- **Media Extraction**: Capture image and video URLs from posts
+- **No Login Required**: Scrapes public data only
+- **Export Formats**: JSON, CSV, Excel
 
 ## Input Parameters
 
@@ -61,6 +45,17 @@ Extract detailed data from a specific post by URL (includes replies on the page 
 
 ### Search Action
 
+Search for posts by keyword on Threads.net.
+
+```json
+{
+    "action": "search",
+    "keyword": "artificial intelligence",
+    "filter": "recent",
+    "maxItems": 50
+}
+```
+
 | Field | Type | Required | Description | Default |
 |-------|------|----------|-------------|---------|
 | `keyword` | string | Yes | Search keyword | - |
@@ -68,6 +63,17 @@ Extract detailed data from a specific post by URL (includes replies on the page 
 | `maxItems` | integer | No | Maximum posts to return (1-1000) | `50` |
 
 ### Hashtag Action
+
+Search posts by hashtag.
+
+```json
+{
+    "action": "hashtag",
+    "tag": "AI",
+    "filter": "recent",
+    "maxItems": 50
+}
+```
 
 | Field | Type | Required | Description | Default |
 |-------|------|----------|-------------|---------|
@@ -77,6 +83,16 @@ Extract detailed data from a specific post by URL (includes replies on the page 
 
 ### Profile Action
 
+Fetch user profile data and recent posts.
+
+```json
+{
+    "action": "profile",
+    "username": "zuck",
+    "maxItems": 20
+}
+```
+
 | Field | Type | Required | Description | Default |
 |-------|------|----------|-------------|---------|
 | `username` | string | Yes | Username to fetch (without @) | - |
@@ -85,14 +101,78 @@ Extract detailed data from a specific post by URL (includes replies on the page 
 
 ### Post Action
 
+Extract detailed data from a specific post including replies.
+
+```json
+{
+    "action": "post",
+    "postUrl": "https://www.threads.com/@zuck/post/ABC123xyz",
+    "maxItems": 50
+}
+```
+
 | Field | Type | Required | Description | Default |
 |-------|------|----------|-------------|---------|
 | `postUrl` | string | Yes | Full URL to the Threads post | - |
-| `maxItems` | integer | No | (Batch/profile/search/hashtag) limit per query where applicable | - |
+| `maxItems` | integer | No | Maximum replies to fetch | `50` |
+
+### Batch Mode
+
+Process multiple inputs in one run. `concurrency` controls how many tasks run in parallel.
+
+```json
+{
+    "action": "search",
+    "keywords": ["vibe coding", "machine learning"],
+    "usernames": ["zuck", "openai"],
+    "tags": ["AI", "tech"],
+    "postUrls": ["https://www.threads.com/@user/post/ABC123"],
+    "maxItems": 20,
+    "filter": "recent",
+    "concurrency": 2
+}
+```
+
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| `keywords` | array | Multiple search keywords | `[]` |
+| `usernames` | array | Multiple usernames | `[]` |
+| `tags` | array | Multiple hashtags | `[]` |
+| `postUrls` | array | Multiple post URLs | `[]` |
+| `concurrency` | integer | Parallel task limit | `2` |
 
 ## Output Format
 
-### Post Output (Search, Hashtag, Post actions)
+### Post Output
+
+Each post is stored as a separate record:
+
+```json
+{
+    "id": "ABC123xyz",
+    "url": "https://www.threads.com/@johndoe/post/ABC123xyz",
+    "author": {
+        "username": "johndoe",
+        "displayName": "John Doe",
+        "profileUrl": "https://www.threads.com/@johndoe",
+        "avatarUrl": "https://...",
+        "isVerified": false
+    },
+    "content": "This is the post content about AI and technology...",
+    "timestamp": "2025-12-04T10:14:34.000Z",
+    "stats": {
+        "likes": 142,
+        "replies": 23,
+        "reposts": 8
+    },
+    "images": ["https://..."],
+    "videos": ["https://..."],
+    "links": ["https://example.com"],
+    "quotedPost": null,
+    "source": "search",
+    "parentId": null
+}
+```
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -112,35 +192,26 @@ Extract detailed data from a specific post by URL (includes replies on the page 
 | `videos` | array | Video URLs (if any) |
 | `links` | array | External links (non-Threads) |
 | `quotedPost` | object | Minimal quoted post info if present |
-| `source` | string | Optional source tag (e.g., `reply`, `profile_posts`) |
+| `source` | string | Source tag: `search`, `hashtag`, `reply`, `profile_posts` |
 | `parentId` | string | If source is `reply`, the parent post ID |
 
-#### Example Post Output
+### Profile Output
 
 ```json
 {
-    "id": "ABC123xyz",
-    "url": "https://www.threads.com/@johndoe/post/ABC123xyz",
-    "author": {
-        "username": "johndoe",
-        "displayName": "John Doe",
-        "profileUrl": "https://www.threads.com/@johndoe",
-        "avatarUrl": "https://...",
-        "isVerified": false
-    },
-    "content": "This is the post content...",
-    "timestamp": "2025-12-04T10:14:34.000Z",
-    "stats": {
-        "likes": 142,
-        "replies": 23,
-        "reposts": 8
-    },
-    "images": [],
-    "videos": []
+    "username": "zuck",
+    "displayName": "Mark Zuckerberg",
+    "profileUrl": "https://www.threads.com/@zuck",
+    "avatarUrl": "https://...",
+    "bio": "Building the future...",
+    "isVerified": true,
+    "followersCount": 5417000,
+    "partial": false,
+    "missingFields": [],
+    "type": "profile",
+    "source": "profile"
 }
 ```
-
-### Profile Output
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -153,66 +224,84 @@ Extract detailed data from a specific post by URL (includes replies on the page 
 | `followersCount` | integer | Number of followers |
 | `partial` | boolean | True if some optional fields are missing |
 | `missingFields` | array | Names of missing optional fields |
-| `type` | string | `"profile"` for the profile record |
-| `source` | string | `"profile"` for the profile record |
-| (posts) | - | Recent posts from the profile page are pushed as separate Dataset items with `source: "profile_posts"` and `profile: <username>` |
-| (posts) | - | Recent posts from the profile page are pushed as separate Dataset items with `source: "profile_posts"` and `profile: <username>` |
-| `profilePosts` | array | Recent posts scraped from the profile page (pushed as separate items with `source: "profile_posts"`) |
 
-#### Example Profile Output
-
-```json
-{
-    "username": "zuck",
-    "displayName": "Mark Zuckerberg",
-    "profileUrl": "https://www.threads.com/@zuck",
-    "avatarUrl": "https://...",
-    "bio": "Building the future...",
-    "isVerified": true,
-    "followersCount": 5417000,
-    "partial": false,
-    "missingFields": []
-}
-```
+Note: Recent posts from the profile page are pushed as separate Dataset items with `source: "profile_posts"` and `profile: <username>`.
 
 ## Data Quality
 
-- Posts: Entries missing essential data (content, author, or valid timestamp) are filtered out and not written to the Dataset.
-- Profiles: If optional fields are missing (e.g., bio/avatar/followers), the record is kept but marked with `partial=true` and `missingFields`.
-- Replies and profile posts reuse the same validation; invalid ones are skipped.
+- **Posts**: Entries missing essential data (content, author, or valid timestamp) are filtered out and not written to the Dataset
+- **Profiles**: If optional fields are missing (e.g., bio/avatar/followers), the record is kept but marked with `partial: true` and `missingFields`
+- **Replies and profile posts**: Reuse the same validation; invalid ones are skipped
 
-## Batch Mode
+## Use Cases
 
-You can run multiple inputs in one run via batch fields. `concurrency` controls how many tasks run in parallel (default 2).
+- **Social Media Monitoring**: Track brand mentions and conversations
+- **Influencer Discovery**: Find content creators by follower metrics
+- **Competitor Research**: Monitor competitor activity and engagement
+- **Content Analysis**: Analyze trending topics and hashtags
+- **Lead Generation**: Discover profiles in your niche
+- **Market Research**: Understand audience sentiment
 
-```json
-{
-  "action": "search",        // kept for compatibility; batch fields drive the tasks
-  "keywords": ["vibe coding", "machine learning"],
-  "usernames": ["zuck", "openai"],
-  "tags": ["AI", "台灣"],
-  "postUrls": ["https://www.threads.com/@user/post/ABC123"],
-  "maxItems": 20,
-  "filter": "recent",
-  "concurrency": 2
-}
-```
+## Performance and Limitations
 
-Notes:
-- `source: "reply"` items include `parentId` of the main post.
-- `source: "profile_posts"` items include `profile: <username>`.
+**Post Limits**:
 
-## Usage Notes
+- User posts: Only recent posts accessible, quantity varies by account
+- Keyword search: Limited by Threads search results
+- Profile search: Limited by search results
 
-- This Actor uses a browser-based approach (Playwright) which is necessary for Threads.net's dynamic content
-- Using Apify Proxy is recommended for better reliability
-- Threads.net may rate-limit requests during high-volume scraping
+**Note**: Threads dynamically loads content, which may limit the amount of data retrievable through scrolling. Actual results may be fewer than the requested limit.
 
-## Cost Estimation
+## Frequently Asked Questions
 
-This Actor runs on Playwright (Chromium), which consumes more compute resources than HTTP-based scrapers.
+**Q: Why do I get fewer results than my maxItems limit?**
+A: Threads limits the amount of content accessible through its interface. The actual number of available posts varies based on multiple factors including account activity, content type, etc.
 
-Estimated costs (may vary):
-- ~50 posts: approximately $0.05
-- ~500 posts: approximately $0.30
-- ~1000 posts: approximately $0.50
+**Q: Can I scrape private accounts?**
+A: No. This Actor only scrapes publicly available data. Private accounts, deleted content, and region-restricted content cannot be accessed.
+
+**Q: Why do some posts have truncated text?**
+A: Threads displays truncated content in feeds. Use the post URL via HTTP request tools to get full content.
+
+**Q: Are usernames with dots supported?**
+A: Yes. Usernames like @user.name are fully supported.
+
+**Q: How do I handle rate limiting?**
+A: Use Apify Proxy (recommended), reduce concurrency, and add intervals between runs. If you encounter persistent issues, wait 10-15 minutes before retrying.
+
+**Q: What happens if Threads shows a login wall?**
+A: The Actor will log an error and skip that request. Consider using different proxy settings or reducing request frequency.
+
+**Q: Can I get engagement metrics?**
+A: Yes. The Actor extracts likes, replies, and reposts for each post to help you analyze content performance.
+
+## Alternative: Official Threads API
+
+**Important**: This Actor operates without login, meaning accessible data volume is limited by Threads' public interface.
+
+**If you need to scrape your own account's data**, consider using the [Official Threads API](https://developers.facebook.com/docs/threads):
+
+- More reliable and stable
+- Higher rate limits
+- Access to full post history
+- No risk of being blocked
+- Official support from Meta
+
+The Threads API is the recommended method for accessing your own account data or for large-scale, production-level data extraction needs.
+
+## Support
+
+Have questions or issues?
+
+- Check [Apify Documentation](https://docs.apify.com)
+- View all fields in the dataset for complete data
+- Report issues via the Issues tab
+- Contact support through the Apify platform
+
+## Disclaimer
+
+This tool is for educational and research purposes only. Please use responsibly and comply with Threads' Terms of Service. The developers are not responsible for any misuse of this tool or violations of platform policies.
+
+---
+
+**Keywords**: Threads scraper, Threads API, Meta Threads, social media scraper, Instagram Threads, Threads posts, Threads data extraction, social media monitoring, Threads automation, influencer discovery, follower count scraper
