@@ -9,8 +9,6 @@ import { PlaywrightCrawler, Dataset, Log } from 'crawlee';
 import type { ProfileInput } from '../types.js';
 import {
     extractProfileFromPage,
-    extractAuthTokens,
-    extractUserId,
     fetchProfileAbout,
     detectPageError,
     handlePageError,
@@ -155,38 +153,30 @@ export async function profileAction(input: ProfileInput, log: Log): Promise<void
             }
 
             // Fetch location and joined date via About API
+            // This triggers by clicking the "..." menu and "About this profile" option
             try {
-                log.debug('Attempting to fetch profile About data...');
+                log.info('Attempting to fetch profile About data via menu click...');
 
-                // Step 1: Extract auth tokens from page
-                const authTokens = await extractAuthTokens(page);
-                if (!authTokens) {
-                    log.debug('Could not extract auth tokens, skipping About data');
+                // Dummy tokens - the new method intercepts API triggered by UI click
+                const dummyTokens = { fb_dtsg: '', lsd: '', jazoest: '' };
+                const aboutResponse = await fetchProfileAbout(page, '', dummyTokens);
+
+                log.info('About API response', {
+                    hasData: !!aboutResponse.data,
+                    debug: aboutResponse.debug,
+                });
+
+                if (aboutResponse.data) {
+                    profileData.location = aboutResponse.data.location;
+                    profileData.joinedDate = aboutResponse.data.joinedDate;
+                    log.info('Profile About data extracted successfully', {
+                        location: aboutResponse.data.location,
+                        joinedDate: aboutResponse.data.joinedDate,
+                    });
+                } else {
+                    log.warning('About API returned no data', { debug: aboutResponse.debug });
                     profileData.location = null;
                     profileData.joinedDate = null;
-                } else {
-                    // Step 2: Extract user ID
-                    const userId = await extractUserId(page, username);
-                    if (!userId) {
-                        log.debug('Could not extract user ID, skipping About data');
-                        profileData.location = null;
-                        profileData.joinedDate = null;
-                    } else {
-                        // Step 3: Call About API
-                        const aboutData = await fetchProfileAbout(page, userId, authTokens);
-                        if (aboutData) {
-                            profileData.location = aboutData.location;
-                            profileData.joinedDate = aboutData.joinedDate;
-                            log.info('Profile About data extracted', {
-                                location: aboutData.location,
-                                joinedDate: aboutData.joinedDate,
-                            });
-                        } else {
-                            log.debug('About API returned no data');
-                            profileData.location = null;
-                            profileData.joinedDate = null;
-                        }
-                    }
                 }
             } catch (err) {
                 log.warning('Failed to fetch profile About data', { error: String(err) });

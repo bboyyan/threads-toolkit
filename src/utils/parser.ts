@@ -889,111 +889,178 @@ export async function extractUserId(page: Page, username: string): Promise<strin
 }
 
 /**
- * Fetch profile "About" data (location, joined date) via internal API
- * Returns null if extraction fails - profile will still be saved without these fields
+ * Extended response from fetchProfileAbout for debugging
+ */
+export interface ProfileAboutResponse {
+    data: ProfileAboutData | null;
+    debug?: {
+        status?: number;
+        error?: string;
+        rawResponse?: string;
+        userData?: unknown;
+    };
+}
+
+/**
+ * Fetch profile "About" data by clicking the menu and reading the dialog content
+ * This triggers the native UI and extracts data from the rendered dialog
  */
 export async function fetchProfileAbout(
     page: Page,
-    userId: string,
-    tokens: ThreadsAuthTokens
-): Promise<ProfileAboutData | null> {
-    return page.evaluate(
-        async (args) => {
-            const { userId, tokens } = args;
+    _userId: string,
+    _tokens: ThreadsAuthTokens
+): Promise<ProfileAboutResponse> {
+    try {
+        // Find the profile-specific More button (before Follow/Following button)
+        const profileMoreButton = await page.evaluate(() => {
+            const buttons = document.querySelectorAll('div[role="button"]');
+            let lastMoreIndex = -1;
 
-            const endpoint =
-                '/api/graphql';
+            for (let i = 0; i < buttons.length; i++) {
+                const btn = buttons[i];
+                const text = btn.textContent?.trim() || '';
+                const svg = btn.querySelector('svg');
+                const ariaLabel = svg?.getAttribute('aria-label') || '';
 
-            // Generate UUID for session
-            const uuid = () =>
-                'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-                    const r = (Math.random() * 16) | 0;
-                    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-                });
-
-            const params = new URLSearchParams();
-            params.append('av', '0');
-            params.append('__user', '0');
-            params.append('__a', '1');
-            params.append('__comet_req', '29');
-            params.append('fb_dtsg', tokens.fb_dtsg);
-            params.append('jazoest', tokens.jazoest);
-            params.append('lsd', tokens.lsd);
-            params.append('doc_id', '9159636494046708');
-            params.append(
-                'variables',
-                JSON.stringify({
-                    userID: userId,
-                })
-            );
-
-            try {
-                const response = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-FB-Friendly-Name': 'BarcelonaProfileAboutTabQuery',
-                    },
-                    body: params.toString(),
-                    credentials: 'include',
-                });
-
-                const text = await response.text();
-
-                // Remove "for (;;);" prefix if present
-                let jsonText = text;
-                if (jsonText.startsWith('for (;;);')) {
-                    jsonText = jsonText.substring(9);
+                if (ariaLabel === 'More' && text === 'More') {
+                    lastMoreIndex = i;
                 }
 
-                const data = JSON.parse(jsonText);
-
-                // Navigate to user data
-                const userData = data?.data?.user;
-                if (!userData) {
-                    return null;
+                // Also check for "Following" (已追蹤) in case user already follows this profile
+                if (text === 'Follow' || text === '追蹤' || text === 'Following' || text === '正在追蹤') {
+                    if (lastMoreIndex >= 0) {
+                        return lastMoreIndex;
+                    }
                 }
-
-                // Extract location - may be in bio_location or location field
-                let location: string | null = null;
-                if (userData.bio_location?.name) {
-                    location = userData.bio_location.name;
-                } else if (userData.location) {
-                    location = userData.location;
-                }
-
-                // Extract joined date from date_joined_as_string or create_timestamp
-                let joinedDate: string | null = null;
-                if (userData.date_joined_as_string) {
-                    // Clean up: remove suffix like "· #2,697,767"
-                    joinedDate = userData.date_joined_as_string.split(/\s*[·•]\s*/)[0].trim();
-                } else if (userData.create_timestamp) {
-                    // Convert timestamp to month/year
-                    const date = new Date(userData.create_timestamp * 1000);
-                    const months = [
-                        'January',
-                        'February',
-                        'March',
-                        'April',
-                        'May',
-                        'June',
-                        'July',
-                        'August',
-                        'September',
-                        'October',
-                        'November',
-                        'December',
-                    ];
-                    joinedDate = `${months[date.getMonth()]} ${date.getFullYear()}`;
-                }
-
-                return { location, joinedDate };
-            } catch {
-                return null;
             }
-        },
-        { userId, tokens }
-    );
+            return -1;
+        });
+
+        let menuClicked = false;
+
+        if (profileMoreButton >= 0) {
+            const allButtons = page.locator('div[role="button"]');
+            await allButtons.nth(profileMoreButton).click();
+            await page.waitForTimeout(800);
+            menuClicked = true;
+        } else {
+            // Fallback: Try second More button
+            const moreButtons = page.locator('div[role="button"]:has(svg[aria-label="More"])');
+            const count = await moreButtons.count();
+            if (count > 1) {
+                await moreButtons.nth(1).click();
+                await page.waitForTimeout(800);
+                menuClicked = true;
+            }
+        }
+
+        if (!menuClicked) {
+            return {
+                data: null,
+                debug: { error: 'Profile menu button not found on page' },
+            };
+        }
+
+        // Look for "About this profile" option
+        const aboutSelectors = [
+            'div[role="button"]:has-text("關於此個人檔案")',
+            'div[role="button"]:has-text("About this profile")',
+            'text="關於此個人檔案"',
+            'text="About this profile"',
+        ];
+
+        let aboutClicked = false;
+        for (const selector of aboutSelectors) {
+            const aboutOption = page.locator(selector).first();
+            const aboutVisible = await aboutOption.isVisible().catch(() => false);
+
+            if (aboutVisible) {
+                await aboutOption.click();
+                await page.waitForTimeout(2000);
+                aboutClicked = true;
+                break;
+            }
+        }
+
+        if (!aboutClicked) {
+            await page.keyboard.press('Escape');
+            return {
+                data: null,
+                debug: { error: 'About option not found. Enable useCookies and provide storageState to access this feature.' },
+            };
+        }
+
+        // Wait for and extract data from the About dialog
+        await page.waitForTimeout(2000);
+
+        const aboutData = await page.evaluate(() => {
+            // Look for the About dialog
+            const dialogs = document.querySelectorAll('[role="dialog"]');
+            let joinedDate: string | null = null;
+            let location: string | null = null;
+
+            for (const dialog of dialogs) {
+                const text = dialog.textContent || '';
+
+                // Look for "Joined" pattern - extract date after "Joined" label
+                // Format: "JoinedJuly 2023" (no space) or "Joined July 2023" or "已加入 2023 年 7 月"
+                const joinedPatterns = [
+                    /Joined\s*([A-Za-z]+\s+\d{4})/i,  // "JoinedJuly 2023" or "Joined July 2023"
+                    /已加入\s*(\d{4}\s*年\s*\d{1,2}\s*月)/,
+                    /加入於\s*(\d{4}\s*年\s*\d{1,2}\s*月)/,
+                ];
+
+                for (const pattern of joinedPatterns) {
+                    const match = text.match(pattern);
+                    if (match) {
+                        // Clean up: remove user number suffix (e.g., "· #1" or "· #2,697,767")
+                        joinedDate = match[1].split(/\s*[·•]\s*/)[0].trim();
+                        break;
+                    }
+                }
+
+                // Look for location - "Based in" or "Location" label
+                // Format: "Based inUnited States" or "Based in United States"
+                const locationPatterns = [
+                    /Based\s+in\s*([A-Za-z\s,]+?)(?:Verified|$)/i,  // "Based inUnited States"
+                    /Location\s*[:：]?\s*([A-Za-z\s,]+?)(?:Verified|$)/i,
+                    /所在地\s*[:：]?\s*(.+?)(?:認證|$)/,
+                    /位置\s*[:：]?\s*(.+?)(?:認證|$)/,
+                ];
+
+                for (const pattern of locationPatterns) {
+                    const match = text.match(pattern);
+                    if (match) {
+                        location = match[1].trim();
+                        break;
+                    }
+                }
+            }
+
+            return { joinedDate, location };
+        });
+
+        // Close the dialog
+        await page.keyboard.press('Escape');
+
+        if (aboutData.joinedDate || aboutData.location) {
+            return {
+                data: aboutData,
+                debug: { status: 200 },
+            };
+        }
+
+        return {
+            data: null,
+            debug: { error: 'Could not extract data from About dialog' },
+        };
+
+    } catch (err) {
+        return {
+            data: null,
+            debug: { error: `Error: ${String(err)}` },
+        };
+    }
 }
 
 // ============================================

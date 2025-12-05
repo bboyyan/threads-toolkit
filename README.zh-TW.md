@@ -250,7 +250,7 @@
 | `partial` | boolean | 若缺少非必填欄位為 true |
 | `missingFields` | array | 缺少的非必填欄位名稱 |
 
-**注意**：`location` 和 `joinedDate` 透過內部 API 取得。若提取失敗，這些欄位將為 `null`，但個人檔案仍會儲存。
+**注意**：`location` 和 `joinedDate` 需要登入才能取得。啟用 `useCookies` 並提供 `storageState` 來存取這些欄位。未登入時，這些欄位將為 `null`。請參閱[身份驗證](#身份驗證選用)設定說明。
 
 注意：個人頁面的近期貼文會以獨立的 Dataset 項目輸出，包含 `source: "profile_posts"` 和 `profile: <username>`。
 

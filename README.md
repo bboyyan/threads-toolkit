@@ -250,7 +250,7 @@ Each post is stored as a separate record:
 | `partial` | boolean | True if some optional fields are missing |
 | `missingFields` | array | Names of missing optional fields |
 
-**Note:** `location` and `joinedDate` are fetched via an internal API. If extraction fails, these fields will be `null` but the profile will still be saved.
+**Note:** `location` and `joinedDate` require authentication. Enable `useCookies` and provide `storageState` to access these fields. Without login, these fields will be `null`. See [Authentication](#authentication-optional) for setup instructions.
 
 Note: Recent posts from the profile page are pushed as separate Dataset items with `source: "profile_posts"` and `profile: <username>`.
 
