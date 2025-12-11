@@ -17,6 +17,8 @@
             "type": "string",
             "description": "⚠️ Required for 'Search Posts' action. Enter keyword to search for posts.",
             "editor": "textfield",
+            "default": "threads",
+            "prefill": "threads",
             "sectionCaption": "🔍 Search Posts",
             "sectionDescription": "Fill this section when Action = Search Posts"
         },

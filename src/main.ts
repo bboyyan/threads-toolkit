@@ -19,6 +19,10 @@ const log = new Log({ prefix: 'ThreadsToolkit' });
 
 // Validate input based on action
 function validateInput(input: Input): void {
+    if (!input.action) {
+        throw new Error('action is required. Valid options: search, profile, hashtag, post');
+    }
+
     switch (input.action) {
         case 'search':
             if (!(input as SearchInput).keyword) {
