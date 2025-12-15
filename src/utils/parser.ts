@@ -241,29 +241,20 @@ async function parsePostFromElement(
                 }
             }
 
-            // Get videos
+            // Get videos - ONLY use DOM-based capture to ensure per-post accuracy
             const videos: string[] = [];
 
-            // DOM-based capture
+            // DOM-based capture: Look for video elements within this specific post container
             const videoElements = container.querySelectorAll('video source, video');
             for (const v of videoElements) {
                 const src = v.getAttribute('src');
                 if (src) videos.push(src);
             }
 
-            // Network-based capture (fallback): scan for video URLs in network logs injected into the page
-            // We look for a data attribute that might be injected by the crawler when intercepting requests.
-            // If not present, this block is a no-op.
-            try {
-                const netVideos = (window as any).__threadsVideoRequests as string[] | undefined;
-                if (netVideos && Array.isArray(netVideos)) {
-                    for (const url of netVideos) {
-                        if (!videos.includes(url)) videos.push(url);
-                    }
-                }
-            } catch (e) {
-                /* ignore */
-            }
+            // NOTE: Network-based capture (via __threadsVideoRequests) was DISABLED
+            // because it accumulated ALL videos from the entire page into a single array,
+            // causing every post to receive the same list of videos regardless of content.
+            // The global window.__threadsVideoRequests is page-level, not post-level.
 
             return {
                 id,
@@ -306,23 +297,23 @@ async function parsePostFromElement(
             links: data.links && data.links.length > 0 ? data.links : undefined,
             quotedPost: data.quoted
                 ? {
-                      id: data.quoted.url?.match(/\/post\/([A-Za-z0-9_-]+)/)?.[1] || `quoted_${Date.now()}`,
-                      url: data.quoted.url || '',
-                      author: data.quoted.username
-                          ? {
-                                username: data.quoted.username,
-                                displayName: data.quoted.username,
-                                profileUrl: `https://www.threads.com/@${data.quoted.username}`,
-                            }
-                          : {
-                                username: 'unknown',
-                                displayName: 'unknown',
-                                profileUrl: '',
-                            },
-                      content: data.quoted.content || '',
-                      timestamp: '',
-                      stats: { likes: 0, replies: 0, reposts: 0 },
-                  }
+                    id: data.quoted.url?.match(/\/post\/([A-Za-z0-9_-]+)/)?.[1] || `quoted_${Date.now()}`,
+                    url: data.quoted.url || '',
+                    author: data.quoted.username
+                        ? {
+                            username: data.quoted.username,
+                            displayName: data.quoted.username,
+                            profileUrl: `https://www.threads.com/@${data.quoted.username}`,
+                        }
+                        : {
+                            username: 'unknown',
+                            displayName: 'unknown',
+                            profileUrl: '',
+                        },
+                    content: data.quoted.content || '',
+                    timestamp: '',
+                    stats: { likes: 0, replies: 0, reposts: 0 },
+                }
                 : undefined,
         };
     } catch {
@@ -773,7 +764,7 @@ export async function extractSinglePostFromPage(page: Page, postId: string, post
     });
 
     const element = containerHandle.asElement();
-        if (!element) return null;
+    if (!element) return null;
 
     const parsed = await parsePostFromElement(element, page, postId);
     if (!parsed) return null;
