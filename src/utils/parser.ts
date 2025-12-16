@@ -210,6 +210,7 @@ async function parsePostFromElement(
             // Get stats - inline parsing to avoid esbuild __name helper issue
             let likes = 0, replies = 0, reposts = 0;
             const roleButtons = container.querySelectorAll('div[role="button"]');
+            const debugStats: string[] = [];
             for (const btn of roleButtons) {
                 const text = btn.textContent || '';
                 // Inline number parsing
@@ -225,10 +226,15 @@ async function parsePostFromElement(
                         num = parseInt(numStr, 10) || 0;
                     }
                 }
+                // Debug: log all buttons with numbers
+                if (num > 0 || text.includes('讚') || text.includes('留言') || text.includes('回覆') || text.includes('轉發')) {
+                    debugStats.push(`"${text.trim().substring(0, 30)}"=${num}`);
+                }
                 if (text.includes('讚') || /^Like/i.test(text)) likes = num;
-                else if (text.includes('留言') || text.includes('回覆') || /^Comment/i.test(text)) replies = num;
+                else if (text.includes('留言') || text.includes('回覆') || /^Comment/i.test(text) || /^Reply/i.test(text)) replies = num;
                 else if (text.includes('轉發') || /^Repost/i.test(text)) reposts = num;
             }
+            console.log('[Parser] Stats buttons:', debugStats.join(', '), '=> likes:', likes, 'replies:', replies, 'reposts:', reposts);
 
             // Get images (exclude avatars)
             const images: string[] = [];
