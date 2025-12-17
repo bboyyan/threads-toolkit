@@ -279,8 +279,18 @@ async function parsePostFromElement(
                 links,
                 quoted,
                 url: `https://www.threads.com${href}`,
+                debugStats: debugStats.join(' | '), // Debug: pass button text to Node context
             };
         }, postId);
+
+        // Debug: Log parsed stats in Node context (will show in Apify run log)
+        console.log(`[Parser] Post ${postId} stats:`, {
+            likes: data.likes,
+            replies: data.replies,
+            reposts: data.reposts,
+            buttons: data.debugStats,
+            content_preview: data.content?.substring(0, 50)
+        });
 
         return {
             id: data.id,
