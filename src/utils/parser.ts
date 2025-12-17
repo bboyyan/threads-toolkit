@@ -208,7 +208,7 @@ async function parsePostFromElement(
             }
 
             // Get stats - inline parsing to avoid esbuild __name helper issue
-            let likes = 0, replies = 0, reposts = 0;
+            let likes = 0, replies = 0, reposts = 0, shares = 0;
             const roleButtons = container.querySelectorAll('div[role="button"]');
             const debugStats: string[] = [];
             for (const btn of roleButtons) {
@@ -231,11 +231,11 @@ async function parsePostFromElement(
 
                 if (text.includes('讚') || /like/i.test(text)) likes = num;
                 else if (text.includes('留言') || text.includes('回覆') || /comment|reply/i.test(text)) replies = num;
-                // Expanded reposts matching: 轉發, 轉貼, 引用, 分享, repost, quote, share
                 else if (text.includes('轉發') || text.includes('轉貼') || text.includes('引用') || /repost|quote/i.test(text)) reposts = num;
+                else if (text.includes('分享') || /share/i.test(text)) shares = num;
             }
             console.log('[Parser] ALL role buttons:', debugStats.join(' | '));
-            console.log('[Parser] Parsed stats => likes:', likes, 'replies:', replies, 'reposts:', reposts);
+            console.log('[Parser] Parsed stats => likes:', likes, 'replies:', replies, 'reposts:', reposts, 'shares:', shares);
 
             // Get images (exclude avatars)
             const images: string[] = [];
@@ -274,6 +274,7 @@ async function parsePostFromElement(
                 likes,
                 replies,
                 reposts,
+                shares,
                 images,
                 videos,
                 links,
@@ -288,6 +289,7 @@ async function parsePostFromElement(
             likes: data.likes,
             replies: data.replies,
             reposts: data.reposts,
+            shares: data.shares,
             buttons: data.debugStats,
             content_preview: data.content?.substring(0, 50)
         });
@@ -308,6 +310,7 @@ async function parsePostFromElement(
                 likes: data.likes || 0,
                 replies: data.replies || 0,
                 reposts: data.reposts || 0,
+                shares: data.shares || 0,
             },
             images: data.images.length > 0 ? data.images : undefined,
             videos: data.videos && data.videos.length > 0 ? data.videos : undefined,
@@ -329,7 +332,7 @@ async function parsePostFromElement(
                         },
                     content: data.quoted.content || '',
                     timestamp: '',
-                    stats: { likes: 0, replies: 0, reposts: 0 },
+                    stats: { likes: 0, replies: 0, reposts: 0, shares: 0 },
                 }
                 : undefined,
         };
@@ -561,6 +564,7 @@ async function parseStats(postElement: Locator): Promise<PostStats> {
         likes: await parseCount(SELECTORS.post.stats.likes),
         replies: await parseCount(SELECTORS.post.stats.replies),
         reposts: await parseCount(SELECTORS.post.stats.reposts),
+        shares: await parseCount(SELECTORS.post.stats.shares || ''),
     };
 }
 
