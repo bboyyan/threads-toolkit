@@ -226,15 +226,16 @@ async function parsePostFromElement(
                         num = parseInt(numStr, 10) || 0;
                     }
                 }
-                // Debug: log all buttons with numbers
-                if (num > 0 || text.includes('讚') || text.includes('留言') || text.includes('回覆') || text.includes('轉發')) {
-                    debugStats.push(`"${text.trim().substring(0, 30)}"=${num}`);
-                }
-                if (text.includes('讚') || /^Like/i.test(text)) likes = num;
-                else if (text.includes('留言') || text.includes('回覆') || /^Comment/i.test(text) || /^Reply/i.test(text)) replies = num;
-                else if (text.includes('轉發') || /^Repost/i.test(text)) reposts = num;
+                // Debug: log ALL role buttons to see what Threads actually shows
+                debugStats.push(`"${text.trim().substring(0, 40)}"=${num}`);
+
+                if (text.includes('讚') || /like/i.test(text)) likes = num;
+                else if (text.includes('留言') || text.includes('回覆') || /comment|reply/i.test(text)) replies = num;
+                // Expanded reposts matching: 轉發, 轉貼, 引用, 分享, repost, quote, share
+                else if (text.includes('轉發') || text.includes('轉貼') || text.includes('引用') || /repost|quote/i.test(text)) reposts = num;
             }
-            console.log('[Parser] Stats buttons:', debugStats.join(', '), '=> likes:', likes, 'replies:', replies, 'reposts:', reposts);
+            console.log('[Parser] ALL role buttons:', debugStats.join(' | '));
+            console.log('[Parser] Parsed stats => likes:', likes, 'replies:', replies, 'reposts:', reposts);
 
             // Get images (exclude avatars)
             const images: string[] = [];
